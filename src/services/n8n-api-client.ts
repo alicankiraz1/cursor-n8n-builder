@@ -3,10 +3,10 @@
  * Handles all communication with n8n instance via REST API
  */
 
-import { 
-  N8nWorkflow, 
-  N8nExecution, 
-  N8nListResponse, 
+import {
+  N8nWorkflow,
+  N8nExecution,
+  N8nListResponse,
   N8nConfig,
   N8nNode,
   N8nConnections,
@@ -42,7 +42,7 @@ export class N8nApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}/api/v1${endpoint}`;
-    
+
     const headers: Record<string, string> = {
       'X-N8N-API-KEY': this.apiKey,
       'Content-Type': 'application/json',
@@ -78,7 +78,7 @@ export class N8nApiClient {
         return JSON.parse(text) as T;
       } catch (error) {
         clearTimeout(timeoutId);
-        
+
         if (error instanceof N8nError) {
           throw error;
         }
@@ -108,9 +108,9 @@ export class N8nApiClient {
       await this.request<N8nListResponse<N8nWorkflow>>('/workflows?limit=1');
       return { status: 'connected' };
     } catch (error) {
-      return { 
-        status: 'error', 
-        version: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        status: 'error',
+        version: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
@@ -129,7 +129,7 @@ export class N8nApiClient {
     tags?: string[];
   }): Promise<N8nListResponse<N8nWorkflow>> {
     const params = new URLSearchParams();
-    
+
     if (options?.limit) params.set('limit', String(options.limit));
     if (options?.cursor) params.set('cursor', options.cursor);
     if (options?.active !== undefined) params.set('active', String(options.active));
@@ -137,7 +137,7 @@ export class N8nApiClient {
 
     const queryString = params.toString();
     const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.request<N8nListResponse<N8nWorkflow>>(endpoint);
   }
 
@@ -157,14 +157,25 @@ export class N8nApiClient {
     connections: N8nConnections;
     settings?: N8nWorkflowSettings;
   }): Promise<N8nWorkflow> {
+    // Ensure settings is always provided with sensible defaults
+    const workflowWithDefaults = {
+      ...workflow,
+      settings: workflow.settings || {
+        executionOrder: 'v1' as const,
+        saveManualExecutions: true,
+        callerPolicy: 'workflowsFromSameOwner' as const,
+      },
+    };
+
     return this.request<N8nWorkflow>('/workflows', {
       method: 'POST',
-      body: JSON.stringify(workflow),
+      body: JSON.stringify(workflowWithDefaults),
     });
   }
 
   /**
    * Update an existing workflow
+   * First fetches the existing workflow, then merges with updates
    */
   async updateWorkflow(
     id: string,
@@ -176,9 +187,25 @@ export class N8nApiClient {
       active: boolean;
     }>
   ): Promise<N8nWorkflow> {
+    // First, get the existing workflow to merge with updates
+    const existingWorkflow = await this.getWorkflow(id);
+
+    // Merge existing workflow with updates
+    const updatedWorkflow = {
+      name: workflow.name ?? existingWorkflow.name,
+      nodes: workflow.nodes ?? existingWorkflow.nodes,
+      connections: workflow.connections ?? existingWorkflow.connections,
+      settings: workflow.settings ?? existingWorkflow.settings ?? {
+        executionOrder: 'v1' as const,
+        saveManualExecutions: true,
+        callerPolicy: 'workflowsFromSameOwner' as const,
+      },
+    };
+
+    // Use PUT for full replacement to ensure all required fields are present
     return this.request<N8nWorkflow>(`/workflows/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(workflow),
+      method: 'PUT',
+      body: JSON.stringify(updatedWorkflow),
     });
   }
 
@@ -224,7 +251,7 @@ export class N8nApiClient {
     includeData?: boolean;
   }): Promise<N8nListResponse<N8nExecution>> {
     const params = new URLSearchParams();
-    
+
     if (options?.limit) params.set('limit', String(options.limit));
     if (options?.cursor) params.set('cursor', options.cursor);
     if (options?.workflowId) params.set('workflowId', options.workflowId);
@@ -233,7 +260,7 @@ export class N8nApiClient {
 
     const queryString = params.toString();
     const endpoint = `/executions${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.request<N8nListResponse<N8nExecution>>(endpoint);
   }
 
@@ -243,10 +270,10 @@ export class N8nApiClient {
   async getExecution(id: string, includeData = false): Promise<N8nExecution> {
     const params = new URLSearchParams();
     if (includeData) params.set('includeData', 'true');
-    
+
     const queryString = params.toString();
     const endpoint = `/executions/${id}${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.request<N8nExecution>(endpoint);
   }
 
@@ -276,7 +303,7 @@ export class N8nApiClient {
     }
   ): Promise<unknown> {
     const method = options?.method || 'POST';
-    
+
     logger.debug(`Triggering webhook: ${method} ${webhookUrl}`);
 
     const fetchOptions: RequestInit = {
@@ -293,9 +320,9 @@ export class N8nApiClient {
 
     try {
       const response = await fetch(webhookUrl, fetchOptions);
-      
+
       const text = await response.text();
-      
+
       if (!response.ok) {
         throw new Error(`Webhook error: HTTP ${response.status} - ${text}`);
       }

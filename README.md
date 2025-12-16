@@ -20,7 +20,7 @@ A Model Context Protocol (MCP) server that enables AI assistants in Cursor IDE t
 ### Installation
 
 ```bash
-git clone https://github.com/alicankiraz1/cursor-n8n-mcp.git
+git clone https://github.com/alicankiraz1/cursor-n8n-builder.git
 cd cursor-n8n-mcp
 
 npm install
